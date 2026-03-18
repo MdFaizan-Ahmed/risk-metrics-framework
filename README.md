@@ -17,7 +17,7 @@ A ground-up implementation of market risk models built iteratively across six no
 - Annualised mean, volatility, skewness, excess kurtosis
 - Correlation and covariance matrix construction (Σ = Corr ⊙ σᵢσⱼ)
 - Beta and CAPM expected return
-- Portfolio variance via **w**ᵀ**Σ****w** with diversification benefit
+- Portfolio variance via **wᵀΣw** with diversification benefit
 - Historical VaR & ES (empirical percentile)
 - Parametric (Delta-Normal) VaR & ES under Gaussian assumptions
 - Historical Monte Carlo VaR (bootstrap resampling from empirical distribution)
