@@ -42,8 +42,8 @@ The repo preserves the full development history. This was a deliberate choice as
 | `v02` | Same as v01 but cleaner. Redundant plots removed, comments tightened. The log returns parallel track remains as I was still building intuition at this stage. |
 | `v03` | Backtesting added. All three frameworks i.e., Kupiec POF, Christoffersen Conditional Coverage, and Basel Traffic Light are implemented. First serious engagement with the question: *does the model actually work?* |
 | `v04` | Out-of-sample validation and Monte Carlo VaR added. Train/test split introduced properly. Rolling VaR/ES. Three-way model comparison: Historical vs Parametric vs MC. |
-| `v05A` *(TrainRets)* | Full refactor. Config block, clean function signatures, structured markdown narrative. **Strict version:** in-sample thresholds derived from `train_returns` only, ensuring no data leakage anywhere. |
-| `v05B` *(Full_Returns)* | Full refactor, same structure as v05A. **Looser version:** in-sample thresholds derived from the full dataset, which is closer to how in-sample fit is typically presented in practice. Explicitly acknowledged in the notebook. |
+| `v05a` *(TrainRets)* | Full refactor. Config block, clean function signatures, structured markdown narrative. **Strict version:** in-sample thresholds derived from `train_returns` only, ensuring no data leakage anywhere. |
+| `v05b` *(Full_Returns)* | Full refactor, same structure as v05A. **Looser version:** in-sample thresholds derived from the full dataset, which is closer to how in-sample fit is typically presented in practice. Explicitly acknowledged in the notebook. |
 
 The purpose of v05A and v05B is not that one is "wrong" but that they answer slightly different questions. v05A is more rigorous for research purposes; v05B reflects common industry presentation.
 
