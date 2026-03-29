@@ -1,91 +1,137 @@
 # Portfolio Risk Metrics & Backtesting Framework
 
-Market risk modelling and validation framework implementing VaR/ES across Historical, Parametric (Delta-Normal), and Monte Carlo approaches, with full backtesting and out-of-sample validation.
+**Market risk modelling and validation framework implementing VaR/ES across Historical, Parametric (Delta-Normal), and Monte Carlo methods, with full in-sample and out-of-sample backtesting.**
+
+---
 
 ## Overview
 
-This project implements a complete market risk framework for a multi-asset portfolio, with a focus on model validation, backtesting, and distributional risk analysis.
+This project implements a multi-method market risk framework for a diversified equity portfolio and evaluates model performance using **regulatory backtesting standards and out-of-sample validation**.
 
-It evaluates model performance under:
+The focus is on **model behaviour under different data regimes**, rather than purely in-sample fit.
 
-- In-sample and out-of-sample conditions
-- Different distributional assumptions
-- Regulatory backtesting standards
-
-The objective is not only to compute VaR, but to assess whether risk models are reliable under real market conditions.
+---
 
 ## Portfolio & Data
-- Assets: AAPL, MSFT, RELIANCE.NS, SAIL.NS, SPY<br>
-- Period: Jan 2016 – Jan 2026<br>
+
+- Assets: AAPL, MSFT, RELIANCE.NS, SAIL.NS, SPY  
+- Period: Jan 2016 – Jan 2026  
 - Split:
-   - Training: 2016–2021<br>
-   - Testing: 2022–2026<br>
-- Data source: yfinance
+  - In-sample: 2016–2021  
+  - Out-of-sample: 2022–2026  
+- Data source: yfinance  
+
+---
 
 ## Risk Models Implemented
-- Historical VaR & Expected Shortfall
-    - Empirical distribution-based
-- Parametric (Delta-Normal) VaR & ES
-    - Gaussian assumption with covariance estimation
-- Monte Carlo VaR
-    - Bootstrap resampling from empirical returns
 
-## Portfolio Construction
-Variance via: wᵀΣw
-Covariance matrix constructed from asset correlations and volatilities
-CAPM beta estimation
-Diversification effects explicitly modelled
+- Historical VaR & Expected Shortfall  
+  - Empirical distribution-based approach  
+
+- Parametric (Delta-Normal) VaR & ES  
+  - Gaussian assumption with covariance estimation  
+
+- Monte Carlo VaR (Historical Simulation)  
+  - Bootstrap resampling from empirical returns  
+
+---
+
+## Portfolio Framework
+
+- Portfolio variance via: wᵀΣw  
+- Covariance matrix constructed from asset correlations and volatilities  
+- CAPM beta estimation  
+- Diversification effects explicitly captured  
+
+---
 
 ## Backtesting & Validation
-- Kupiec POF Test (exception rate)
-- Christoffersen Conditional Coverage Test (independence + clustering)
-- Basel Traffic Light Framework
-- Strict train/test separation
-- Out-of-sample validation across 2,300+ trading days
+
+- Kupiec Proportion of Failures (POF) test  
+- Christoffersen Conditional Coverage test  
+- Basel Traffic Light framework  
+- Strict train/test separation  
+- Out-of-sample validation across 2,300+ trading days  
+
+---
 
 ## Key Findings
-- Parametric VaR fails in real-world data
-- Due to violation of normality (fat tails, skewness)
-- Fails Kupiec test even in-sample
-- Exhibits clustering of violations during stress periods
-- Historical VaR is more robust
-- Better captures empirical distribution characteristics
-- More stable across validation frameworks
-- Monte Carlo (bootstrap) performs comparably to Historical VaR
-- Preserves fat-tail behaviour
-- Produces consistent thresholds and passes OOS tests
-- Model risk is highly regime-dependent
-- Performance degrades significantly out-of-sample
-- Highlights importance of validation beyond calibration
-- Synthetic normal data validation confirms implementation correctness
-- Parametric model passes when assumptions are satisfied
-- Confirms failures are due to data properties, not coding errors
+
+- Parametric VaR shows mixed performance across regimes  
+  - Fails in-sample (2016–2021)  
+  - Passes out-of-sample (2022–2026)  
+  - Reflects estimation window effects and regime dependence rather than consistent superiority  
+
+- Historical VaR remains broadly robust  
+  - Passes both in-sample and out-of-sample tests  
+  - Better captures empirical distribution characteristics  
+
+- Monte Carlo (bootstrap) aligns closely with Historical VaR  
+  - Produces similar thresholds  
+  - Passes out-of-sample validation  
+  - Inherits empirical distribution properties  
+
+- Model performance is regime-dependent  
+  - Backtesting results vary significantly across time periods  
+  - Highlights the impact of non-stationarity and changing volatility regimes  
+
+- Backtesting results alone are insufficient to rank model quality  
+  - Outcomes are sensitive to:
+    - Data regime  
+    - Estimation window  
+    - Sample-specific characteristics  
+
+---
 
 ## Key Insight
 
-- All models fail out-of-sample but for fundamentally different reasons.
-- This framework isolates why models fail, not just whether they fail.
+- Model performance is conditional on the data regime  
+- A model may fail under one distributional environment and pass under another without implying a structural improvement  
+
+This highlights the importance of **robust validation across multiple regimes**, not just in-sample calibration.
+
+---
 
 ## Methodological Notes
 
-- Simple vs Log Returns
-    - Simple returns used for portfolio aggregation
-    - Log returns used for distributional analysis
-- Scaling Assumptions
-    - √T scaling only holds under i.i.d. assumptions
-    - ES exhibits slightly faster scaling due to tail sensitivity
-- Monte Carlo Approach
-    - Bootstrap resampling preserves empirical distribution
-    - Extends naturally to path-dependent risk measures
+- Simple vs Log Returns  
+  - Simple returns used for portfolio aggregation  
+  - Log returns used for distributional analysis  
+
+- Scaling Assumptions  
+  - √T scaling assumes i.i.d. returns  
+  - ES scaling exhibits slightly faster growth due to tail sensitivity  
+
+- Monte Carlo Approach  
+  - Bootstrap resampling from empirical distribution  
+  - Not independent of historical VaR, but useful for simulation-based extension  
+
+---
+
+## Development Approach
+
+- Initial exploration of returns, covariance, and portfolio construction  
+- Introduction of VaR/ES modelling under multiple assumptions  
+- Implementation of regulatory backtesting frameworks  
+- Addition of out-of-sample validation  
+- Refinement through structured model comparison  
+
+This iterative approach mirrors how risk models are developed and validated in practice.
+
+---
 
 ## Future Work
-- Stress testing & scenario analysis
-- GARCH-based volatility modelling
-- Filtered Historical Simulation (FHS)
-- Factor models & PCA-based risk decomposition
-- FRTB (SA/IMA) implementation
-- P&L attribution & model validation frameworks (SR 11-7)
+
+- Stress testing & scenario analysis  
+- GARCH-based volatility modelling  
+- Filtered Historical Simulation (FHS)  
+- Factor models & PCA-based risk decomposition  
+- FRTB (SA/IMA) framework  
+- P&L attribution & model validation (SR 11-7)  
+
+---
 
 ## Tech Stack
-Python: pandas, NumPy, SciPy, matplotlib
-Data: yfinance
+
+- Python: pandas, NumPy, SciPy, matplotlib  
+- Data: yfinance  
