@@ -89,4 +89,3 @@ Diversification effects explicitly modelled
 ## Tech Stack
 Python: pandas, NumPy, SciPy, matplotlib
 Data: yfinance
-```
