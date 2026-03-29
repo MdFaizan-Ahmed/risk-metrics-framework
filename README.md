@@ -63,7 +63,7 @@ Diversification effects explicitly modelled
 
 ## Key Insight
 
-- All models fail out-of-sample—but for fundamentally different reasons.
+- All models fail out-of-sample but for fundamentally different reasons.
 - This framework isolates why models fail, not just whether they fail.
 
 ## Methodological Notes
