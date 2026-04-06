@@ -72,7 +72,7 @@ def parametric_var_es(returns, alpha_var=0.99, alpha_es=0.975, holding_days=10):
     z_es = norm.ppf(1 - alpha_es)
 
     var_10d = -(mu + sigma * z_var) * np.sqrt(holding_days)
-    es_10d = -(mu + sigma * norm.pdf(z_es) / (1 - alpha_es)) * np.sqrt(holding_days)
+    es_10d = abs((mu + sigma * norm.pdf(z_es) / (1 - alpha_es)) * np.sqrt(holding_days))
 
     return var_10d, es_10d
 
