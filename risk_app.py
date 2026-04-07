@@ -22,6 +22,9 @@ from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
+if 'run_clicked' not in st.session_state:
+    st.session_state.run_clicked = False
+
 # ============================================================================
 # Core Risk Functions (refactored from your notebook)
 # ============================================================================
@@ -242,7 +245,9 @@ with st.sidebar:
 
 # Main content
 if run_btn:
-    with st.spinner("Fetching data and computing metrics..."):
+    st.session_state.run_clicked = True
+if st.session_state.run_clicked:
+   with st.spinner("Fetching data..."):
         try:
             # Fetch data
             prices, returns = fetch_data(tickers, start_date, end_date)
