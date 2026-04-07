@@ -389,7 +389,7 @@ if run_btn:
                         yaxis_title="Expected Return (Annual)",
                         height=500
                     )
-                            st.pyplot(fig)
+            st.pyplot(fig)
   
             # VaR/ES comparison
             st.subheader("📊 VaR & Expected Shortfall Comparison")
