@@ -16,6 +16,7 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 from scipy.stats import norm, chi2
+import scipy.optimize as sco
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime
@@ -162,7 +163,6 @@ def optimize_portfolio(returns, method='max_sharpe'):
     - optimal_weights: array of optimal weights
     - stats: [return, volatility, sharpe]
     """
-    import scipy.optimize as sco
     
     def portfolio_stats(weights):
         """Calculate return, volatility, and Sharpe ratio"""
@@ -348,7 +348,7 @@ if run_btn:
             st.caption("Note: Optimization assumes no risk-free rate and no short selling. Historical returns as proxy for expected returns.")
 
                         # Efficient Frontier (optional, computationally heavier)
-            if st.checkbox("Show Efficient Frontier", value=False):
+            if st.button("Show Efficient Frontier"):
                 with st.spinner("Generating efficient frontier..."):
                     # Generate random portfolios for visualization
                     n_portfolios = 2000
@@ -389,8 +389,8 @@ if run_btn:
                         yaxis_title="Expected Return (Annual)",
                         height=500
                     )
-                    st.plotly_chart(fig3, use_container_width=True)
-                    
+                            st.pyplot(fig)
+  
             # VaR/ES comparison
             st.subheader("📊 VaR & Expected Shortfall Comparison")
             var_es_df = pd.DataFrame({
