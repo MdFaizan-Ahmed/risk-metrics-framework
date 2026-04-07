@@ -11,10 +11,6 @@ Original file is located at
 Portfolio Risk Metrics Dashboard
 Interactive VaR/ES backtesting with Basel-compliant validation
 """
-"""
-Portfolio Risk Metrics Dashboard
-Interactive VaR/ES backtesting with Basel-compliant validation
-"""
 import streamlit as st
 import pandas as pd
 import numpy as np
