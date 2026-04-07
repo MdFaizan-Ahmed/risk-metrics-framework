@@ -150,6 +150,52 @@ def compute_betas(returns, market_ticker='SPY'):
 
     return betas
 
+def optimize_portfolio(returns, method='max_sharpe'):
+    """
+    Mean-variance portfolio optimization
+    
+    Parameters:
+    - returns: DataFrame of asset returns
+    - method: 'max_sharpe' or 'min_variance'
+    
+    Returns:
+    - optimal_weights: array of optimal weights
+    - stats: [return, volatility, sharpe]
+    """
+    import scipy.optimize as sco
+    
+    def portfolio_stats(weights):
+        """Calculate return, volatility, and Sharpe ratio"""
+        pret = np.sum(returns.mean() * weights) * 252
+        pvol = np.sqrt(np.dot(weights.T, np.dot(returns.cov() * 252, weights)))
+        sharpe = pret / pvol  # risk-free rate = 0 for simplicity
+        return pret, pvol, sharpe
+    
+    def neg_sharpe(weights):
+        return -portfolio_stats(weights)[2]
+    
+    def port_variance(weights):
+        return portfolio_stats(weights)[1] ** 2
+    
+    # Constraints: weights sum to 1
+    constraints = ({'type': 'eq', 'fun': lambda x: np.sum(x) - 1})
+    # Bounds: no short selling (0 to 1)
+    bounds = tuple((0, 1) for _ in range(len(returns.columns)))
+    # Initial guess: equal weight
+    init_weights = np.array([1.0 / len(returns.columns)] * len(returns.columns))
+    
+    if method == 'max_sharpe':
+        result = sco.minimize(neg_sharpe, init_weights, method='SLSQP', 
+                              bounds=bounds, constraints=constraints)
+    else:  # min_variance
+        result = sco.minimize(port_variance, init_weights, method='SLSQP', 
+                              bounds=bounds, constraints=constraints)
+    
+    optimal_weights = result['x']
+    stats = portfolio_stats(optimal_weights)
+    
+    return optimal_weights, stats
+
 # ============================================================================
 # Streamlit UI
 # ============================================================================
@@ -244,7 +290,63 @@ if run_btn:
             col3.metric("Diversification Benefit", f"{div_benefit:.1%}")
             col4.metric("10-day 99% VaR (Hist)", f"{hist_var:.2%}")
             col5.metric("10-day 97.5% ES (Hist)", f"{hist_es:.2%}")
-
+            
+            # ===== PORTFOLIO OPTIMIZATION =====
+            st.subheader("📊 Portfolio Optimization (Mean-Variance)")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                opt_method = st.radio(
+                    "Optimization Objective",
+                    ['max_sharpe', 'min_variance'],
+                    format_func=lambda x: "Maximize Sharpe Ratio" if x == 'max_sharpe' else "Minimize Volatility",
+                    horizontal=True
+                )
+            
+            with col2:
+                show_comparison = st.checkbox("Compare with Equal Weight", value=True)
+            
+            # Run optimization
+            opt_weights, opt_stats = optimize_portfolio(returns, method=opt_method)
+            
+            # Display optimal weights
+            opt_df = pd.DataFrame({
+                'Asset': returns.columns,
+                'Optimal Weight': opt_weights.round(4),
+                'Equal Weight': [1.0/len(returns.columns)] * len(returns.columns)
+            })
+            
+            if show_comparison:
+                st.dataframe(opt_df.style.format({'Optimal Weight': '{:.2%}', 'Equal Weight': '{:.2%}'}),
+                           use_container_width=True, hide_index=True)
+            else:
+                st.dataframe(opt_df[['Asset', 'Optimal Weight']].style.format({'Optimal Weight': '{:.2%}'}),
+                           use_container_width=True, hide_index=True)
+            
+            # Comparison metrics
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Optimal Portfolio Return", f"{opt_stats[0]:.2%}")
+                st.metric("Optimal Portfolio Volatility", f"{opt_stats[1]:.2%}")
+                st.metric("Optimal Sharpe Ratio", f"{opt_stats[2]:.2f}")
+            
+            with col2:
+                # Compare with equal weight
+                eq_weights = np.array([1.0/len(returns.columns)] * len(returns.columns))
+                eq_ret = np.sum(returns.mean() * eq_weights) * 252
+                eq_vol = np.sqrt(np.dot(eq_weights.T, np.dot(returns.cov() * 252, eq_weights)))
+                eq_sharpe = eq_ret / eq_vol
+                st.metric("Equal-Weight Return", f"{eq_ret:.2%}")
+                st.metric("Equal-Weight Volatility", f"{eq_vol:.2%}")
+                st.metric("Equal-Weight Sharpe", f"{eq_sharpe:.2f}")
+            
+            with col3:
+                st.metric("Improvement (Return)", f"{(opt_stats[0]/eq_ret - 1):.1%}")
+                st.metric("Reduction (Volatility)", f"{(1 - opt_stats[1]/eq_vol):.1%}")
+                st.metric("Improvement (Sharpe)", f"{(opt_stats[2]/eq_sharpe - 1):.1%}")
+            
+            st.caption("Note: Optimization assumes no risk-free rate and no short selling. Historical returns as proxy for expected returns.")
+            
             # VaR/ES comparison
             st.subheader("📊 VaR & Expected Shortfall Comparison")
             var_es_df = pd.DataFrame({
