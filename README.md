@@ -89,6 +89,7 @@ The focus is on **model behaviour under different data regimes**, rather than pu
 
 - Model performance is conditional on the data regime  
 - A model may fail under one distributional environment and pass under another without implying a structural improvement  
+- **Model fails on high-volatility small-cap portfolios, highlighting need for regime-specific calibration**
 
 This highlights the importance of **robust validation across multiple regimes**, not just in-sample calibration.
 
