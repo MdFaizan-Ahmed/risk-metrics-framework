@@ -310,7 +310,40 @@ if st.session_state.run_clicked:
             
             with col2:
                 show_comparison = st.checkbox("Compare with Equal Weight", value=True)
+            # --- CUSTOM WEIGHTS SECTION ---
+            st.markdown("---")
+            st.subheader("📝 Custom Portfolio Weights")
             
+            # Get asset list from returns.columns (returns exists here)
+            assets = returns.columns.tolist()
+            default_weights = [1.0/len(assets)] * len(assets)
+            default_str = ", ".join([f"{w:.2f}" for w in default_weights])
+            
+            col_a, col_b = st.columns([3, 1])
+            with col_a:
+                weight_input = st.text_input(
+                    "Enter custom weights (comma-separated, sum to 1)",
+                    value=default_str,
+                    help="Example: 0.3, 0.2, 0.2, 0.15, 0.15"
+                )
+                
+                try:
+                    custom_weights = [float(w.strip()) for w in weight_input.split(",")]
+                    if len(custom_weights) != len(assets):
+                        st.error(f"Need {len(assets)} weights. You entered {len(custom_weights)}.")
+                        custom_weights = None
+                    elif abs(sum(custom_weights) - 1) > 0.01:
+                        st.error(f"Weights sum to {sum(custom_weights):.2f}, must sum to 1.")
+                        custom_weights = None
+                except:
+                    st.error("Invalid format. Use comma-separated numbers.")
+                    custom_weights = None
+            
+            with col_b:
+                st.write("")
+                st.write("")
+                use_custom = st.checkbox("Use custom weights", value=False) if custom_weights is not None else False
+
             # Run optimization
             opt_weights, opt_stats = optimize_portfolio(returns, method=opt_method)
             
@@ -328,27 +361,56 @@ if st.session_state.run_clicked:
                 st.dataframe(opt_df[['Asset', 'Optimal Weight']].style.format({'Optimal Weight': '{:.2%}'}),
                            use_container_width=True, hide_index=True)
             
-            # Comparison metrics
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Optimal Portfolio Return", f"{opt_stats[0]:.2%}")
-                st.metric("Optimal Portfolio Volatility", f"{opt_stats[1]:.2%}")
-                st.metric("Optimal Sharpe Ratio", f"{opt_stats[2]:.2f}")
-            
-            with col2:
-                # Compare with equal weight
+                       # Comparison metrics (custom or equal-weight)
+            if use_custom and custom_weights is not None:
+                # Calculate custom portfolio metrics
+                custom_ret = np.sum(returns.mean() * custom_weights) * 252
+                custom_vol = np.sqrt(np.dot(custom_weights, np.dot(returns.cov() * 252, custom_weights)))
+                custom_sharpe = custom_ret / custom_vol
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Optimal Portfolio Return", f"{opt_stats[0]:.2%}")
+                    st.metric("Optimal Portfolio Volatility", f"{opt_stats[1]:.2%}")
+                    st.metric("Optimal Sharpe Ratio", f"{opt_stats[2]:.2f}")
+                with col2:
+                    st.metric("Your Portfolio Return", f"{custom_ret:.2%}")
+                    st.metric("Your Portfolio Volatility", f"{custom_vol:.2%}")
+                    st.metric("Your Sharpe Ratio", f"{custom_sharpe:.2f}")
+                with col3:
+                    st.metric("Improvement (Return)", f"{(opt_stats[0]/custom_ret - 1):.1%}")
+                    st.metric("Reduction (Volatility)", f"{(1 - opt_stats[1]/custom_vol):.1%}")
+                    st.metric("Improvement (Sharpe)", f"{(opt_stats[2]/custom_sharpe - 1):.1%}")
+                
+                # Show weights table
+                st.subheader("⚖️ Weight Comparison")
+                custom_df = pd.DataFrame({
+                    'Asset': assets,
+                    'Your Weight': custom_weights,
+                    'Optimal Weight': opt_weights
+                })
+                st.dataframe(custom_df.style.format({'Your Weight': '{:.2%}', 'Optimal Weight': '{:.2%}'}),
+                            use_container_width=True, hide_index=True)
+            else:
+                # Original equal-weight comparison
                 eq_weights = np.array([1.0/len(returns.columns)] * len(returns.columns))
                 eq_ret = np.sum(returns.mean() * eq_weights) * 252
                 eq_vol = np.sqrt(np.dot(eq_weights.T, np.dot(returns.cov() * 252, eq_weights)))
                 eq_sharpe = eq_ret / eq_vol
-                st.metric("Equal-Weight Return", f"{eq_ret:.2%}")
-                st.metric("Equal-Weight Volatility", f"{eq_vol:.2%}")
-                st.metric("Equal-Weight Sharpe", f"{eq_sharpe:.2f}")
-            
-            with col3:
-                st.metric("Improvement (Return)", f"{(opt_stats[0]/eq_ret - 1):.1%}")
-                st.metric("Reduction (Volatility)", f"{(1 - opt_stats[1]/eq_vol):.1%}")
-                st.metric("Improvement (Sharpe)", f"{(opt_stats[2]/eq_sharpe - 1):.1%}")
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Optimal Portfolio Return", f"{opt_stats[0]:.2%}")
+                    st.metric("Optimal Portfolio Volatility", f"{opt_stats[1]:.2%}")
+                    st.metric("Optimal Sharpe Ratio", f"{opt_stats[2]:.2f}")
+                with col2:
+                    st.metric("Equal-Weight Return", f"{eq_ret:.2%}")
+                    st.metric("Equal-Weight Volatility", f"{eq_vol:.2%}")
+                    st.metric("Equal-Weight Sharpe", f"{eq_sharpe:.2f}")
+                with col3:
+                    st.metric("Improvement (Return)", f"{(opt_stats[0]/eq_ret - 1):.1%}")
+                    st.metric("Reduction (Volatility)", f"{(1 - opt_stats[1]/eq_vol):.1%}")
+                    st.metric("Improvement (Sharpe)", f"{(opt_stats[2]/eq_sharpe - 1):.1%}")
             
             st.caption("Note: Optimization assumes no risk-free rate and no short selling. Historical returns as proxy for expected returns.")
             
