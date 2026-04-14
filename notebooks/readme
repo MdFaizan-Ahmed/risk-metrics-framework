@@ -2,4 +2,5 @@
 𝘃𝟬𝟯: First backtesting attempt. Kupiec POF, Christoffersen, Basel Traffic Light. Built the question before I knew how to answer it cleanly.
 𝘃𝟬𝟰: Train/test split, out-of-sample validation, Monte Carlo VaR added. Three-way model comparison. Rolling VaR/ES.
 𝘃𝟬𝟱 (𝗿𝗲𝗳𝗮𝗰𝘁𝗼𝗿𝗲𝗱): Config block, clean functions, structured narrative. This led to two variants, one with strict train-only thresholds (no data leakage), and another with full-sample in-sample fit (closer to industry presentation). Both intentional, both documented.
-𝘃𝟬6: Added Rolling Backtesting and rolling windows.
+𝘃𝟬𝟲: Added Rolling Backtesting and rolling windows.
+𝘃𝟬𝟳: Replaced equal-weighted portfolio with Sharpe-optimised weights.
