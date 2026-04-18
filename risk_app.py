@@ -73,7 +73,7 @@ def parametric_var_es(returns, alpha_var=0.99, alpha_es=0.975, holding_days=10):
 
     return var_10d, es_10d
 
-def kupiec_test(returns, var_threshold, alpha=0.01):
+def kupiec_test(returns, var_threshold, alpha=0.05):
     """Kupiec Proportion of Failures test"""
     n = len(returns)
     failures = int(np.sum(returns < -var_threshold))
