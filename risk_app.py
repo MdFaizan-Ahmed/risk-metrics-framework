@@ -184,7 +184,7 @@ def optimize_portfolio(returns, method='max_sharpe'):
 
 st.set_page_config(page_title="Risk Metrics Dashboard", page_icon="📊", layout="wide")
 st.title("📊 Portfolio Risk Metrics Dashboard")
-st.markdown("Basel-compliant VaR/ES with backtesting validation | Custom weights supported")
+st.markdown("Basel-compliant VaR/ES with backtesting validation | Compare vs. Sharpe-Optimized Portfolio")
 
 # Sidebar configuration
 with st.sidebar:
@@ -208,8 +208,8 @@ with st.sidebar:
     st.subheader("📊 Portfolio Selection")
     portfolio_type = st.radio(
         "Choose portfolio type",
-        ["Optimized Portfolios", "Custom Weights"],
-        help="Optimized: Max Sharpe & Min Variance automatically calculated. Custom: Enter your own weights."
+        ["Custom Weights", "Min Variance (Benchmark)"],
+        help="Custom: Enter your own weights. Benchmark: Minimum Variance portfolio (lowest possible volatility)"
     )
     
     custom_weights_dict = None
@@ -235,6 +235,11 @@ with st.sidebar:
             for ticker in custom_weights_dict:
                 custom_weights_dict[ticker] /= total
             st.success(f"✅ Normalized weights (now sum to 100%)")
+        
+        # Optional: Show Sharpe-optimized for comparison
+        show_sharpe_benchmark = st.checkbox("📈 Also compare with Sharpe-Optimized portfolio", value=True)
+    else:
+        show_sharpe_benchmark = False
 
     with st.expander("Advanced Options"):
         rolling_window = st.number_input("Rolling Window (days)", min_value=50, max_value=500, value=250)
@@ -254,72 +259,29 @@ if st.session_state.run_clicked:
                 st.error("No data retrieved. Check tickers and date range.")
                 st.stop()
 
+            # Always compute Sharpe-optimized and Min Variance for benchmarking
+            sharpe_weights, sharpe_stats = optimize_portfolio(returns, 'max_sharpe')
+            minvar_weights, minvar_stats = optimize_portfolio(returns, 'min_variance')
+            
+            # Calculate portfolio returns for benchmarks
+            sharpe_returns, sharpe_ann_ret, sharpe_ann_vol, sharpe_div = compute_portfolio_metrics(returns, sharpe_weights)
+            minvar_returns, minvar_ann_ret, minvar_ann_vol, minvar_div = compute_portfolio_metrics(returns, minvar_weights)
+            
             # ========== PORTFOLIO DEFINITION ==========
             portfolios_to_analyze = []
             
-            if portfolio_type == "Optimized Portfolios":
-                # Equal-weight portfolio
-                eq_returns, eq_ann_ret, eq_ann_vol, eq_div = compute_portfolio_metrics(returns)
-                portfolios_to_analyze.append({
-                    'name': "Equal-Weight",
-                    'returns': eq_returns,
-                    'ann_ret': eq_ann_ret,
-                    'ann_vol': eq_ann_vol,
-                    'div_benefit': eq_div,
-                    'weights': np.ones(len(returns.columns)) / len(returns.columns)
-                })
-                
-                # Max Sharpe portfolio
-                opt_weights_sharpe, opt_stats_sharpe = optimize_portfolio(returns, 'max_sharpe')
-                sharpe_returns, sharpe_ann_ret, sharpe_ann_vol, sharpe_div = compute_portfolio_metrics(returns, opt_weights_sharpe)
-                portfolios_to_analyze.append({
-                    'name': "Max Sharpe",
-                    'returns': sharpe_returns,
-                    'ann_ret': sharpe_ann_ret,
-                    'ann_vol': sharpe_ann_vol,
-                    'div_benefit': sharpe_div,
-                    'weights': opt_weights_sharpe,
-                    'sharpe_ratio': opt_stats_sharpe[2]
-                })
-                
-                # Min Variance portfolio
-                opt_weights_minvar, opt_stats_minvar = optimize_portfolio(returns, 'min_variance')
-                minvar_returns, minvar_ann_ret, minvar_ann_vol, minvar_div = compute_portfolio_metrics(returns, opt_weights_minvar)
-                portfolios_to_analyze.append({
-                    'name': "Min Variance",
-                    'returns': minvar_returns,
-                    'ann_ret': minvar_ann_ret,
-                    'ann_vol': minvar_ann_vol,
-                    'div_benefit': minvar_div,
-                    'weights': opt_weights_minvar,
-                    'sharpe_ratio': opt_stats_minvar[2]
-                })
-                
-                # Show optimization weights table
-                st.subheader("📊 Optimized Portfolio Weights")
-                opt_df = pd.DataFrame({
-                    'Asset': returns.columns,
-                    'Max Sharpe': opt_weights_sharpe.round(4),
-                    'Min Variance': opt_weights_minvar.round(4),
-                    'Equal Weight': [1.0/len(returns.columns)] * len(returns.columns)
-                })
-                st.dataframe(opt_df.style.format({
-                    'Max Sharpe': '{:.2%}', 
-                    'Min Variance': '{:.2%}', 
-                    'Equal Weight': '{:.2%}'
-                }), use_container_width=True, hide_index=True)
-                
-            else:  # Custom Weights
+            if portfolio_type == "Custom Weights":
                 # Create custom weight array
                 custom_weights = np.array([custom_weights_dict[t] for t in tickers])
                 custom_returns, custom_ann_ret, custom_ann_vol, custom_div = compute_portfolio_metrics(returns, custom_weights)
                 portfolios_to_analyze.append({
-                    'name': "Custom Portfolio",
+                    'name': "🎯 Your Custom Portfolio",
                     'returns': custom_returns,
                     'ann_ret': custom_ann_ret,
                     'ann_vol': custom_ann_vol,
                     'div_benefit': custom_div,
-                    'weights': custom_weights
+                    'weights': custom_weights,
+                    'type': 'custom'
                 })
                 
                 # Show custom weights table
@@ -331,22 +293,70 @@ if st.session_state.run_clicked:
                 st.dataframe(weights_df.style.format({'Weight': '{:.2%}'}), 
                             use_container_width=True, hide_index=True)
                 
-                # Also show equal-weight for comparison if user wants
-                if st.checkbox("Compare with Equal-Weight portfolio"):
-                    eq_returns, eq_ann_ret, eq_ann_vol, eq_div = compute_portfolio_metrics(returns)
+                # Add Sharpe-optimized benchmark if requested
+                if show_sharpe_benchmark:
                     portfolios_to_analyze.append({
-                        'name': "Equal-Weight (Benchmark)",
-                        'returns': eq_returns,
-                        'ann_ret': eq_ann_ret,
-                        'ann_vol': eq_ann_vol,
-                        'div_benefit': eq_div,
-                        'weights': np.ones(len(returns.columns)) / len(returns.columns)
+                        'name': "📈 Sharpe-Optimized (Benchmark)",
+                        'returns': sharpe_returns,
+                        'ann_ret': sharpe_ann_ret,
+                        'ann_vol': sharpe_ann_vol,
+                        'div_benefit': sharpe_div,
+                        'weights': sharpe_weights,
+                        'type': 'sharpe',
+                        'sharpe_ratio': sharpe_stats[2]
                     })
+                
+                # Always add Min Variance as second benchmark (lowest risk)
+                portfolios_to_analyze.append({
+                    'name': "🛡️ Min Variance (Lowest Risk)",
+                    'returns': minvar_returns,
+                    'ann_ret': minvar_ann_ret,
+                    'ann_vol': minvar_ann_vol,
+                    'div_benefit': minvar_div,
+                    'weights': minvar_weights,
+                    'type': 'minvar',
+                    'sharpe_ratio': minvar_stats[2]
+                })
+                
+            else:  # Min Variance Benchmark mode
+                portfolios_to_analyze.append({
+                    'name': "🛡️ Min Variance Portfolio",
+                    'returns': minvar_returns,
+                    'ann_ret': minvar_ann_ret,
+                    'ann_vol': minvar_ann_vol,
+                    'div_benefit': minvar_div,
+                    'weights': minvar_weights,
+                    'type': 'minvar',
+                    'sharpe_ratio': minvar_stats[2]
+                })
+                
+                # Also show Sharpe-optimized for context
+                portfolios_to_analyze.append({
+                    'name': "📈 Sharpe-Optimized (For Context)",
+                    'returns': sharpe_returns,
+                    'ann_ret': sharpe_ann_ret,
+                    'ann_vol': sharpe_ann_vol,
+                    'div_benefit': sharpe_div,
+                    'weights': sharpe_weights,
+                    'type': 'sharpe',
+                    'sharpe_ratio': sharpe_stats[2]
+                })
+
+            # Show optimization weights table for transparency
+            if len(portfolios_to_analyze) > 1:
+                st.subheader("📊 Benchmark Portfolio Weights")
+                bench_df = pd.DataFrame({'Asset': returns.columns})
+                for port in portfolios_to_analyze:
+                    if port['type'] in ['sharpe', 'minvar']:
+                        bench_df[port['name']] = port['weights']
+                if len(bench_df.columns) > 1:
+                    st.dataframe(bench_df.style.format({col: '{:.2%}' for col in bench_df.columns if col != 'Asset'}), 
+                                use_container_width=True, hide_index=True)
 
             split_date = pd.to_datetime(train_split)
             
             # Function to run full backtest suite
-            def backtest_portfolio(port_returns, name, weights=None):
+            def backtest_portfolio(port_returns, name, weights=None, port_type=None):
                 train = port_returns[port_returns.index < split_date]
                 test = port_returns[port_returns.index >= split_date]
                 
@@ -370,13 +380,14 @@ if st.session_state.run_clicked:
                     'Hist ES 10d': hist_es,
                     'Param VaR 10d': param_var,
                     'Param ES 10d': param_es,
-                    'Weights': weights
+                    'Weights': weights,
+                    'Type': port_type
                 }
 
             # Run backtest for all portfolios
             backtest_results = []
             for port in portfolios_to_analyze:
-                bt = backtest_portfolio(port['returns'], port['name'], port.get('weights'))
+                bt = backtest_portfolio(port['returns'], port['name'], port.get('weights'), port.get('type'))
                 if bt:
                     bt.update(port)
                     backtest_results.append(bt)
@@ -387,32 +398,73 @@ if st.session_state.run_clicked:
 
             # ========== DISPLAY RESULTS ==========
             
-            # Key metrics row (first portfolio as primary)
+            # Key metrics row (custom portfolio if exists, otherwise min variance)
             primary = backtest_results[0]
             st.subheader(f"📈 Key Risk Metrics ({primary['Name']})")
             cols = st.columns(5)
             cols[0].metric("Portfolio Volatility (Ann.)", f"{primary['ann_vol']:.2%}")
             cols[1].metric("Portfolio Return (Ann.)", f"{primary['ann_ret']:.2%}")
-            cols[2].metric("Diversification Benefit", f"{primary['div_benefit']:.1%}")
+            cols[2].metric("Sharpe Ratio", f"{primary['ann_ret']/primary['ann_vol']:.2f}" if primary['ann_vol'] > 0 else "N/A")
             cols[3].metric("10-day 99% VaR (Hist)", f"{primary['Hist VaR 10d']:.2%}")
             cols[4].metric("10-day 97.5% ES (Hist)", f"{primary['Hist ES 10d']:.2%}")
 
             # Comparison Metrics Table
-            st.subheader("📊 Portfolio Comparison")
+            st.subheader("📊 Portfolio Comparison vs. Benchmarks")
             comparison_data = []
             for bt in backtest_results:
+                sharpe_ratio = bt['ann_ret']/bt['ann_vol'] if bt['ann_vol'] > 0 else 0
+                # Calculate outperformance vs Min Variance (if not itself)
+                if bt['type'] != 'minvar' and len([b for b in backtest_results if b.get('type') == 'minvar']) > 0:
+                    minvar_port = [b for b in backtest_results if b.get('type') == 'minvar'][0]
+                    vol_diff = (bt['ann_vol'] - minvar_port['ann_vol']) / minvar_port['ann_vol']
+                    ret_diff = bt['ann_ret'] - minvar_port['ann_ret']
+                else:
+                    vol_diff = None
+                    ret_diff = None
+                
                 row = {
                     'Portfolio': bt['Name'],
                     'Ann. Return': f"{bt['ann_ret']:.2%}",
                     'Ann. Vol': f"{bt['ann_vol']:.2%}",
-                    'Sharpe': f"{bt['ann_ret']/bt['ann_vol']:.2f}" if bt['ann_vol'] > 0 else "N/A",
-                    'Div. Benefit': f"{bt['div_benefit']:.1%}",
+                    'Sharpe': f"{sharpe_ratio:.2f}",
                     '99% VaR (10d)': f"{bt['Hist VaR 10d']:.2%}",
-                    '97.5% ES (10d)': f"{bt['Hist ES 10d']:.2%}"
+                    '97.5% ES (10d)': f"{bt['Hist ES 10d']:.2%}",
+                    'Backtest Result': '✅ PASS' if bt['Kupiec']['passed'] else '❌ FAIL'
                 }
                 comparison_data.append(row)
             
             st.dataframe(pd.DataFrame(comparison_data), use_container_width=True, hide_index=True)
+            
+            # If custom portfolio, show how it compares to benchmarks
+            if portfolio_type == "Custom Weights" and show_sharpe_benchmark:
+                custom_port = backtest_results[0]
+                sharpe_port = [b for b in backtest_results if b.get('type') == 'sharpe'][0]
+                minvar_port = [b for b in backtest_results if b.get('type') == 'minvar'][0]
+                
+                st.subheader("🎯 Your Portfolio vs. Benchmarks")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.markdown("**vs. Sharpe-Optimized**")
+                    ret_diff = custom_port['ann_ret'] - sharpe_port['ann_ret']
+                    vol_diff = custom_port['ann_vol'] - sharpe_port['ann_vol']
+                    st.metric("Return Difference", f"{ret_diff:+.2%}", 
+                             delta_color="normal" if ret_diff > 0 else "inverse")
+                    st.metric("Volatility Difference", f"{vol_diff:+.2%}",
+                             delta_color="inverse" if vol_diff < 0 else "normal")
+                with col2:
+                    st.markdown("**vs. Min Variance**")
+                    ret_diff = custom_port['ann_ret'] - minvar_port['ann_ret']
+                    vol_diff = custom_port['ann_vol'] - minvar_port['ann_vol']
+                    st.metric("Return Difference", f"{ret_diff:+.2%}",
+                             delta_color="normal" if ret_diff > 0 else "inverse")
+                    st.metric("Volatility Difference", f"{vol_diff:+.2%}",
+                             delta_color="inverse" if vol_diff < 0 else "normal")
+                with col3:
+                    st.markdown("**Risk-Adjusted**")
+                    custom_sharpe = custom_port['ann_ret']/custom_port['ann_vol'] if custom_port['ann_vol'] > 0 else 0
+                    sharpe_sharpe = sharpe_port['ann_ret']/sharpe_port['ann_vol'] if sharpe_port['ann_vol'] > 0 else 0
+                    st.metric("Your Sharpe Ratio", f"{custom_sharpe:.2f}")
+                    st.metric("Sharpe-Optimized", f"{sharpe_sharpe:.2f}")
 
             # VaR/ES Comparison Table
             st.subheader("📊 VaR & Expected Shortfall Comparison")
@@ -435,37 +487,42 @@ if st.session_state.run_clicked:
             }), use_container_width=True, hide_index=True)
 
             # Backtesting Results
-            st.subheader("🔍 Backtesting Results (Out-of-Sample)")
+            st.subheader("🔍 Regulatory Backtesting Results (Out-of-Sample)")
+            st.caption("Kupiec POF Test: Checks if failure rate matches 99% confidence level")
             
             # Dynamic columns based on number of portfolios
             backtest_cols = st.columns(len(backtest_results))
             for col, bt in zip(backtest_cols, backtest_results):
                 with col:
                     st.markdown(f"**{bt['Name']}**")
-                    st.metric("Failures", f"{bt['Kupiec']['failures']} / {len(bt['Test Returns'])}")
+                    st.metric("VaR Exceptions", f"{bt['Kupiec']['failures']} / {len(bt['Test Returns'])}")
                     st.metric("Expected", bt['Kupiec']['expected'])
                     st.metric("p-value", bt['Kupiec']['p_value'])
                     st.markdown(f"**Verdict:** {'✅ PASS' if bt['Kupiec']['passed'] else '❌ FAIL'}")
-                    st.markdown(f"**Traffic Light:** {bt['Traffic Light']['zone']}")
+                    st.markdown(f"**Basel Zone:** {bt['Traffic Light']['zone']}")
 
             # Rolling VaR Chart (all portfolios)
             st.subheader("📉 Rolling 10-day 99% VaR Comparison")
             fig = go.Figure()
-            colors = ['red', 'blue', 'green', 'orange', 'purple']
-            for i, bt in enumerate(backtest_results):
+            colors = {'custom': '#FF6B6B', 'sharpe': '#4ECDC4', 'minvar': '#45B7D1'}
+            line_styles = {'custom': 'solid', 'sharpe': 'dash', 'minvar': 'dot'}
+            
+            for bt in backtest_results:
                 roll = rolling_var(bt['returns'], rolling_window, alpha_var, holding_days)
                 fig.add_trace(go.Scatter(
                     x=roll.index, y=roll, mode='lines', 
                     name=bt['Name'], 
-                    line=dict(color=colors[i % len(colors)], width=1.5)
+                    line=dict(color=colors.get(bt.get('type', 'custom'), '#888888'), 
+                             width=2 if bt.get('type') == 'custom' else 1.5,
+                             dash=line_styles.get(bt.get('type', 'custom'), 'solid'))
                 ))
             
             fig.update_layout(
-                title=f"Rolling {int(alpha_var*100)}% VaR ({holding_days}-day)",
+                title=f"Rolling {int(alpha_var*100)}% VaR ({holding_days}-day) - Lower is Better",
                 xaxis_title="Date", 
                 yaxis_title="Expected Loss",
                 yaxis_tickformat=".0%", 
-                height=400,
+                height=450,
                 legend=dict(x=0.02, y=0.98, bgcolor='rgba(255,255,255,0.8)')
             )
             st.plotly_chart(fig, use_container_width=True)
@@ -473,8 +530,10 @@ if st.session_state.run_clicked:
             # Betas
             betas = compute_betas(returns, market_ticker)
             if betas:
-                st.subheader("📐 CAPM Betas")
-                beta_df = pd.DataFrame([{'Asset': k, 'Beta': f"{v:.3f}"} for k, v in betas.items()])
+                st.subheader("📐 CAPM Betas (Market Sensitivity)")
+                beta_df = pd.DataFrame([{'Asset': k, 'Beta': f"{v:.3f}", 
+                                        'Interpretation': 'High risk' if v > 1.2 else ('Low risk' if v < 0.8 else 'Market-like')} 
+                                       for k, v in betas.items()])
                 st.dataframe(beta_df, use_container_width=True, hide_index=True)
 
             # Correlation Heatmap
@@ -490,21 +549,23 @@ if st.session_state.run_clicked:
                 texttemplate='%{text}',
                 textfont={"size": 10}
             ))
-            fig_corr.update_layout(height=500, width=700)
+            fig_corr.update_layout(height=500)
             st.plotly_chart(fig_corr, use_container_width=True)
 
             # Summary Statistics
-            st.subheader("📊 Descriptive Statistics")
+            st.subheader("📊 Individual Asset Statistics")
             stats_df = pd.DataFrame({
                 'Ticker': returns.columns,
                 'Ann. Return': returns.mean() * 252,
                 'Ann. Vol': returns.std() * np.sqrt(252),
+                'Sharpe': (returns.mean() * 252) / (returns.std() * np.sqrt(252)),
                 'Skewness': returns.skew(),
                 'Excess Kurtosis': returns.kurtosis()
             }).round(4)
             st.dataframe(stats_df.style.format({
                 'Ann. Return': '{:.2%}',
-                'Ann. Vol': '{:.2%}'
+                'Ann. Vol': '{:.2%}',
+                'Sharpe': '{:.2f}'
             }), use_container_width=True, hide_index=True)
 
             # Download Results
@@ -525,7 +586,7 @@ if st.session_state.run_clicked:
                     'Kupiec_Failures': bt['Kupiec']['failures'],
                     'Kupiec_p_value': bt['Kupiec']['p_value'],
                     'Kupiec_Passed': bt['Kupiec']['passed'],
-                    'Traffic_Light': bt['Traffic Light']['zone']
+                    'Basel_Traffic_Light': bt['Traffic Light']['zone']
                 })
             
             results_df = pd.DataFrame(download_data)
@@ -545,40 +606,49 @@ if st.session_state.run_clicked:
 else:
     st.info("👈 Configure parameters in the sidebar and click 'Run Analysis'")
     st.markdown("""
-    ### Features
-    - **Multiple VaR Methods**: Historical, Parametric, and Rolling Window
-    - **Regulatory Backtesting**: Kupiec POF test, Basel Traffic Light framework
-    - **Flexible Portfolio Options**:
-      - ✨ **Optimized Portfolios**: Max Sharpe & Min Variance (automatically calculated)
-      - 🎯 **Custom Weights**: Enter your own portfolio allocations
-    - **Interactive Visualizations**: Rolling risk metrics, correlation heatmaps
-    - **Download Results**: Export all metrics to CSV
+    ### 🎯 Why Sharpe-Optimized is the Right Benchmark
     
-    ### How to Use Custom Weights
-    1. Select "Custom Weights" under Portfolio Selection
-    2. Enter your desired allocation for each asset (decimal or percentage)
-    3. The dashboard will automatically normalize weights to sum to 100%
-    4. Run analysis to see your portfolio's risk metrics and backtest results
+    **Equal-weight is arbitrary** - it assumes you have no view on asset returns or risk.
+    
+    **Sharpe-Optimized (Tangency Portfolio)** is theoretically optimal because:
+    - Maximizes return per unit of risk
+    - Represents the efficient frontier's best risk-adjusted return
+    - What mean-variance optimization actually solves for
+    
+    ### 📊 What This Dashboard Does
+    
+    - **Custom Portfolio**: Enter your own weights to test your strategy
+    - **Sharpe-Optimized Benchmark**: Compare against the theoretical optimum
+    - **Min Variance Benchmark**: See the lowest possible volatility portfolio
+    - **Regulatory Validation**: Kupiec tests & Basel Traffic Light zones
+    - **Rolling Risk Analysis**: See how VaR changes through market cycles
+    
+    ### 🚀 Quick Start
+    
+    1. Enter your tickers (e.g., `AAPL, MSFT, GOOGL`)
+    2. Choose "Custom Weights" and enter your allocation
+    3. Compare against Sharpe-Optimized and Min Variance benchmarks
+    4. See if your strategy beats the theoretical optimum
     """)
 
-    # Example custom portfolio
-    with st.expander("📖 Example: Building a Custom Portfolio"):
+    # Example comparison
+    with st.expander("📖 Understanding the Benchmarks"):
         st.markdown("""
-        **Example: 60/40 Stock/Bond Portfolio**
-        - Tickers: `SPY, TLT`
-        - Weights: SPY = 0.60, TLT = 0.40
+        **Sharpe-Optimized Portfolio**
+        - Solves for weights that maximize (Return - RiskFree)/Volatility
+        - Theoretically the best risk-adjusted return
+        - Often concentrated in best-performing assets
+        - Can have high volatility despite high Sharpe
         
-        **Example: Tech-Heavy Growth Portfolio**
-        - Tickers: `AAPL, MSFT, NVDA, GOOGL`
-        - Weights: 25% each (equal-weight)
+        **Min Variance Portfolio**
+        - Solves for lowest possible volatility regardless of return
+        - Often diversified across uncorrelated assets
+        - Lower risk but potentially lower returns
+        - Good for risk-averse investors
         
-        **Example: Concentrated Value Portfolio**
-        - Tickers: `BRK-B, JPM, WMT, XOM`
-        - Weights: BRK-B 40%, JPM 20%, WMT 20%, XOM 20%
-        
-        The dashboard will calculate:
-        - Portfolio volatility & return
-        - VaR and Expected Shortfall
-        - Regulatory backtest results
-        - Rolling risk metrics over time
+        **Your Custom Portfolio**
+        - Your actual or proposed allocation
+        - Compare Sharpe ratio to see if you're beating the market
+        - Compare VaR to see if you're taking more tail risk
+        - Regulatory backtest shows if your VaR model is accurate
         """)
