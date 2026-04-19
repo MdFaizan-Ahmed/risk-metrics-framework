@@ -2,7 +2,7 @@
 """
 Portfolio Risk Metrics Dashboard
 Interactive VaR/ES backtesting with Basel-compliant validation
-Now with Sharpe-optimized portfolio backtesting + Custom Weights
+Now with Christoffersen Conditional Coverage Test & Sharpe-Optimized Benchmark
 """
 
 import streamlit as st
@@ -102,6 +102,65 @@ def kupiec_test(returns, var_threshold, alpha=0.05):
         'passed': not reject
     }
 
+def christoffersen_test(returns, var_threshold, alpha=0.01):
+    """
+    Christoffersen's Conditional Coverage test.
+
+    Extends Kupiec by also testing for independence of exceptions.
+    Clusters of failures (e.g. all in one crisis month) indicate
+    the model fails to capture volatility dynamics.
+
+    H₀: failures are independent AND occur at rate alpha
+
+    Returns
+    -------
+    dict : LR_uc (unconditional), LR_ind (independence), LR_cc (joint),
+           p_value, reject_H0, pi0 (P(failure | no prior failure)),
+           pi1 (P(failure | prior failure))
+    """
+    n        = len(returns)
+    exc      = (returns < -var_threshold).astype(int)
+    T00 = T01 = T10 = T11 = 0
+
+    for i in range(1, n):
+        prev, curr = exc.iloc[i-1], exc.iloc[i]
+        if   prev == 0 and curr == 0: T00 += 1
+        elif prev == 0 and curr == 1: T01 += 1
+        elif prev == 1 and curr == 0: T10 += 1
+        elif prev == 1 and curr == 1: T11 += 1
+
+    x     = exc.sum()
+    pi0   = T01 / (T00 + T01) if (T00 + T01) > 0 else 0
+    pi1   = T11 / (T10 + T11) if (T10 + T11) > 0 else 0
+    pi    = (T01 + T11) / (T00 + T01 + T10 + T11)
+
+    LR_uc = -2 * np.log(
+        ((1 - alpha) ** (n - x) * alpha ** x) /
+        ((1 - x/n) ** (n - x) * (x/n) ** x)
+    )
+
+    if pi0 == 0 or pi1 == 0 or pi == 0:
+        LR_ind = 0
+    else:
+        LR_ind = -2 * np.log(
+            ((1 - pi) ** (T00 + T10) * pi ** (T01 + T11)) /
+            ((1 - pi0) ** T00 * pi0 ** T01 * (1 - pi1) ** T10 * pi1 ** T11)
+        )
+
+    LR_cc   = LR_uc + LR_ind
+    p_value = 1 - chi2.cdf(LR_cc, df=2)
+
+    return {
+        'failures'  : int(x),
+        'LR_uc'     : round(LR_uc, 4),
+        'LR_ind'    : round(LR_ind, 4),
+        'LR_cc'     : round(LR_cc, 4),
+        'p_value'   : round(p_value, 4),
+        'reject_H0' : p_value < 0.01,
+        'pi0'       : round(pi0, 4),
+        'pi1'       : round(pi1, 4),
+    }
+    
 def traffic_light(returns, var_threshold, alpha=0.05, window=250):
     """Basel Traffic Light test"""
     n = len(returns)
@@ -184,7 +243,7 @@ def optimize_portfolio(returns, method='max_sharpe'):
 
 st.set_page_config(page_title="Risk Metrics Dashboard", page_icon="📊", layout="wide")
 st.title("📊 Portfolio Risk Metrics Dashboard")
-st.markdown("Basel-compliant VaR/ES with backtesting validation | Compare vs. Sharpe-Optimized Portfolio")
+st.markdown("Basel-compliant VaR/ES with Kupiec & **Christoffersen** backtesting | Compare vs. Sharpe-Optimized Portfolio")
 
 # Sidebar configuration
 with st.sidebar:
@@ -231,12 +290,10 @@ with st.sidebar:
         
         if abs(total - 1.0) > 0.01:
             st.warning(f"⚠️ Weights sum to {total:.1%}, not 100%. Will normalize.")
-            # Normalize
             for ticker in custom_weights_dict:
                 custom_weights_dict[ticker] /= total
             st.success(f"✅ Normalized weights (now sum to 100%)")
         
-        # Optional: Show Sharpe-optimized for comparison
         show_sharpe_benchmark = st.checkbox("📈 Also compare with Sharpe-Optimized portfolio", value=True)
     else:
         show_sharpe_benchmark = False
@@ -271,7 +328,6 @@ if st.session_state.run_clicked:
             portfolios_to_analyze = []
             
             if portfolio_type == "Custom Weights":
-                # Create custom weight array
                 custom_weights = np.array([custom_weights_dict[t] for t in tickers])
                 custom_returns, custom_ann_ret, custom_ann_vol, custom_div = compute_portfolio_metrics(returns, custom_weights)
                 portfolios_to_analyze.append({
@@ -284,16 +340,10 @@ if st.session_state.run_clicked:
                     'type': 'custom'
                 })
                 
-                # Show custom weights table
                 st.subheader("📊 Your Custom Portfolio Weights")
-                weights_df = pd.DataFrame({
-                    'Asset': tickers,
-                    'Weight': custom_weights
-                })
-                st.dataframe(weights_df.style.format({'Weight': '{:.2%}'}), 
-                            use_container_width=True, hide_index=True)
+                weights_df = pd.DataFrame({'Asset': tickers, 'Weight': custom_weights})
+                st.dataframe(weights_df.style.format({'Weight': '{:.2%}'}), use_container_width=True, hide_index=True)
                 
-                # Add Sharpe-optimized benchmark if requested
                 if show_sharpe_benchmark:
                     portfolios_to_analyze.append({
                         'name': "📈 Sharpe-Optimized (Benchmark)",
@@ -306,7 +356,6 @@ if st.session_state.run_clicked:
                         'sharpe_ratio': sharpe_stats[2]
                     })
                 
-                # Always add Min Variance as second benchmark (lowest risk)
                 portfolios_to_analyze.append({
                     'name': "🛡️ Min Variance (Lowest Risk)",
                     'returns': minvar_returns,
@@ -330,7 +379,6 @@ if st.session_state.run_clicked:
                     'sharpe_ratio': minvar_stats[2]
                 })
                 
-                # Also show Sharpe-optimized for context
                 portfolios_to_analyze.append({
                     'name': "📈 Sharpe-Optimized (For Context)",
                     'returns': sharpe_returns,
@@ -342,7 +390,6 @@ if st.session_state.run_clicked:
                     'sharpe_ratio': sharpe_stats[2]
                 })
 
-            # Show optimization weights table for transparency
             if len(portfolios_to_analyze) > 1:
                 st.subheader("📊 Benchmark Portfolio Weights")
                 bench_df = pd.DataFrame({'Asset': returns.columns})
@@ -355,7 +402,6 @@ if st.session_state.run_clicked:
 
             split_date = pd.to_datetime(train_split)
             
-            # Function to run full backtest suite
             def backtest_portfolio(port_returns, name, weights=None, port_type=None):
                 train = port_returns[port_returns.index < split_date]
                 test = port_returns[port_returns.index >= split_date]
@@ -365,6 +411,7 @@ if st.session_state.run_clicked:
                 
                 var_1d = -np.percentile(train, (1 - alpha_var) * 100)
                 kupiec = kupiec_test(test, var_1d, alpha=1 - alpha_var)
+                christoffersen = christoffersen_test(test, var_1d, alpha=1 - alpha_var)
                 tl = traffic_light(test, var_1d, alpha=1 - alpha_var)
                 hist_var, hist_es = historical_var_es(port_returns, alpha_var, alpha_es, holding_days)
                 param_var, param_es = parametric_var_es(port_returns, alpha_var, alpha_es, holding_days)
@@ -375,6 +422,7 @@ if st.session_state.run_clicked:
                     'Test Returns': test,
                     'VaR 1d': var_1d,
                     'Kupiec': kupiec,
+                    'Christoffersen': christoffersen,
                     'Traffic Light': tl,
                     'Hist VaR 10d': hist_var,
                     'Hist ES 10d': hist_es,
@@ -384,7 +432,6 @@ if st.session_state.run_clicked:
                     'Type': port_type
                 }
 
-            # Run backtest for all portfolios
             backtest_results = []
             for port in portfolios_to_analyze:
                 bt = backtest_portfolio(port['returns'], port['name'], port.get('weights'), port.get('type'))
@@ -398,7 +445,6 @@ if st.session_state.run_clicked:
 
             # ========== DISPLAY RESULTS ==========
             
-            # Key metrics row (custom portfolio if exists, otherwise min variance)
             primary = backtest_results[0]
             st.subheader(f"📈 Key Risk Metrics ({primary['Name']})")
             cols = st.columns(5)
@@ -408,20 +454,10 @@ if st.session_state.run_clicked:
             cols[3].metric("10-day 99% VaR (Hist)", f"{primary['Hist VaR 10d']:.2%}")
             cols[4].metric("10-day 97.5% ES (Hist)", f"{primary['Hist ES 10d']:.2%}")
 
-            # Comparison Metrics Table
             st.subheader("📊 Portfolio Comparison vs. Benchmarks")
             comparison_data = []
             for bt in backtest_results:
                 sharpe_ratio = bt['ann_ret']/bt['ann_vol'] if bt['ann_vol'] > 0 else 0
-                # Calculate outperformance vs Min Variance (if not itself)
-                if bt['type'] != 'minvar' and len([b for b in backtest_results if b.get('type') == 'minvar']) > 0:
-                    minvar_port = [b for b in backtest_results if b.get('type') == 'minvar'][0]
-                    vol_diff = (bt['ann_vol'] - minvar_port['ann_vol']) / minvar_port['ann_vol']
-                    ret_diff = bt['ann_ret'] - minvar_port['ann_ret']
-                else:
-                    vol_diff = None
-                    ret_diff = None
-                
                 row = {
                     'Portfolio': bt['Name'],
                     'Ann. Return': f"{bt['ann_ret']:.2%}",
@@ -429,13 +465,11 @@ if st.session_state.run_clicked:
                     'Sharpe': f"{sharpe_ratio:.2f}",
                     '99% VaR (10d)': f"{bt['Hist VaR 10d']:.2%}",
                     '97.5% ES (10d)': f"{bt['Hist ES 10d']:.2%}",
-                    'Backtest Result': '✅ PASS' if bt['Kupiec']['passed'] else '❌ FAIL'
+                    'Kupiec Pass?': '✅' if bt['Kupiec']['passed'] else '❌'
                 }
                 comparison_data.append(row)
-            
             st.dataframe(pd.DataFrame(comparison_data), use_container_width=True, hide_index=True)
             
-            # If custom portfolio, show how it compares to benchmarks
             if portfolio_type == "Custom Weights" and show_sharpe_benchmark:
                 custom_port = backtest_results[0]
                 sharpe_port = [b for b in backtest_results if b.get('type') == 'sharpe'][0]
@@ -447,18 +481,14 @@ if st.session_state.run_clicked:
                     st.markdown("**vs. Sharpe-Optimized**")
                     ret_diff = custom_port['ann_ret'] - sharpe_port['ann_ret']
                     vol_diff = custom_port['ann_vol'] - sharpe_port['ann_vol']
-                    st.metric("Return Difference", f"{ret_diff:+.2%}", 
-                             delta_color="normal" if ret_diff > 0 else "inverse")
-                    st.metric("Volatility Difference", f"{vol_diff:+.2%}",
-                             delta_color="inverse" if vol_diff < 0 else "normal")
+                    st.metric("Return Difference", f"{ret_diff:+.2%}", delta_color="normal" if ret_diff > 0 else "inverse")
+                    st.metric("Volatility Difference", f"{vol_diff:+.2%}", delta_color="inverse" if vol_diff < 0 else "normal")
                 with col2:
                     st.markdown("**vs. Min Variance**")
                     ret_diff = custom_port['ann_ret'] - minvar_port['ann_ret']
                     vol_diff = custom_port['ann_vol'] - minvar_port['ann_vol']
-                    st.metric("Return Difference", f"{ret_diff:+.2%}",
-                             delta_color="normal" if ret_diff > 0 else "inverse")
-                    st.metric("Volatility Difference", f"{vol_diff:+.2%}",
-                             delta_color="inverse" if vol_diff < 0 else "normal")
+                    st.metric("Return Difference", f"{ret_diff:+.2%}", delta_color="normal" if ret_diff > 0 else "inverse")
+                    st.metric("Volatility Difference", f"{vol_diff:+.2%}", delta_color="inverse" if vol_diff < 0 else "normal")
                 with col3:
                     st.markdown("**Risk-Adjusted**")
                     custom_sharpe = custom_port['ann_ret']/custom_port['ann_vol'] if custom_port['ann_vol'] > 0 else 0
@@ -466,7 +496,6 @@ if st.session_state.run_clicked:
                     st.metric("Your Sharpe Ratio", f"{custom_sharpe:.2f}")
                     st.metric("Sharpe-Optimized", f"{sharpe_sharpe:.2f}")
 
-            # VaR/ES Comparison Table
             st.subheader("📊 VaR & Expected Shortfall Comparison")
             var_es_data = []
             for bt in backtest_results:
@@ -477,31 +506,42 @@ if st.session_state.run_clicked:
                     'Parametric 99% VaR (10d)': bt['Param VaR 10d'],
                     'Parametric 97.5% ES (10d)': bt['Param ES 10d']
                 })
-            
             var_es_df = pd.DataFrame(var_es_data)
-            st.dataframe(var_es_df.style.format({
-                'Historical 99% VaR (10d)': '{:.2%}',
-                'Historical 97.5% ES (10d)': '{:.2%}',
-                'Parametric 99% VaR (10d)': '{:.2%}',
-                'Parametric 97.5% ES (10d)': '{:.2%}'
-            }), use_container_width=True, hide_index=True)
+            st.dataframe(var_es_df.style.format({col: '{:.2%}' for col in var_es_df.columns if col != 'Portfolio'}), use_container_width=True, hide_index=True)
 
-            # Backtesting Results
-            st.subheader("🔍 Regulatory Backtesting Results (Out-of-Sample)")
-            st.caption("Kupiec POF Test: Checks if failure rate matches 99% confidence level")
+            # Display Christoffersen Test Results
+            st.subheader("🔬 Christoffersen Conditional Coverage Test")
+            st.caption("Tests if VaR exceptions are independent AND occur at the correct rate (H₀: model is correct). Rejecting H₀ means the model has clustering bias or wrong coverage.")
             
-            # Dynamic columns based on number of portfolios
-            backtest_cols = st.columns(len(backtest_results))
-            for col, bt in zip(backtest_cols, backtest_results):
+            christoffersen_cols = st.columns(len(backtest_results))
+            for col, bt in zip(christoffersen_cols, backtest_results):
+                cc = bt['Christoffersen']
                 with col:
                     st.markdown(f"**{bt['Name']}**")
-                    st.metric("VaR Exceptions", f"{bt['Kupiec']['failures']} / {len(bt['Test Returns'])}")
-                    st.metric("Expected", bt['Kupiec']['expected'])
-                    st.metric("p-value", bt['Kupiec']['p_value'])
-                    st.markdown(f"**Verdict:** {'✅ PASS' if bt['Kupiec']['passed'] else '❌ FAIL'}")
+                    st.metric("Failures", cc['failures'])
+                    st.metric("LR_cc (Joint)", cc['LR_cc'])
+                    st.metric("p-value", cc['p_value'])
+                    st.metric("π₀ (P(fail | no prior))", cc['pi0'])
+                    st.metric("π₁ (P(fail | prior fail))", cc['pi1'])
+                    verdict = "❌ REJECT H₀ (Model flawed)" if cc['reject_H0'] else "✅ FAIL TO REJECT (Model OK)"
+                    st.markdown(f"**Verdict:** {verdict}")
+
+            # Display Kupiec Results
+            st.subheader("🔍 Kupiec Proportion of Failures (Unconditional Coverage)")
+            st.caption("Checks if total failure rate matches the expected 1% (or 5%) confidence level. Does NOT test for clustering.")
+            
+            kupiec_cols = st.columns(len(backtest_results))
+            for col, bt in zip(kupiec_cols, backtest_results):
+                kup = bt['Kupiec']
+                with col:
+                    st.markdown(f"**{bt['Name']}**")
+                    st.metric("VaR Exceptions", f"{kup['failures']} / {len(bt['Test Returns'])}")
+                    st.metric("Expected", kup['expected'])
+                    st.metric("p-value", kup['p_value'])
+                    st.markdown(f"**Verdict:** {'✅ PASS' if kup['passed'] else '❌ FAIL'}")
                     st.markdown(f"**Basel Zone:** {bt['Traffic Light']['zone']}")
 
-            # Rolling VaR Chart (all portfolios)
+            # Rolling VaR Chart
             st.subheader("📉 Rolling 10-day 99% VaR Comparison")
             fig = go.Figure()
             colors = {'custom': '#FF6B6B', 'sharpe': '#4ECDC4', 'minvar': '#45B7D1'}
@@ -519,10 +559,8 @@ if st.session_state.run_clicked:
             
             fig.update_layout(
                 title=f"Rolling {int(alpha_var*100)}% VaR ({holding_days}-day) - Lower is Better",
-                xaxis_title="Date", 
-                yaxis_title="Expected Loss",
-                yaxis_tickformat=".0%", 
-                height=450,
+                xaxis_title="Date", yaxis_title="Expected Loss",
+                yaxis_tickformat=".0%", height=450,
                 legend=dict(x=0.02, y=0.98, bgcolor='rgba(255,255,255,0.8)')
             )
             st.plotly_chart(fig, use_container_width=True)
@@ -531,24 +569,13 @@ if st.session_state.run_clicked:
             betas = compute_betas(returns, market_ticker)
             if betas:
                 st.subheader("📐 CAPM Betas (Market Sensitivity)")
-                beta_df = pd.DataFrame([{'Asset': k, 'Beta': f"{v:.3f}", 
-                                        'Interpretation': 'High risk' if v > 1.2 else ('Low risk' if v < 0.8 else 'Market-like')} 
-                                       for k, v in betas.items()])
+                beta_df = pd.DataFrame([{'Asset': k, 'Beta': f"{v:.3f}", 'Interpretation': 'High risk' if v > 1.2 else ('Low risk' if v < 0.8 else 'Market-like')} for k, v in betas.items()])
                 st.dataframe(beta_df, use_container_width=True, hide_index=True)
 
             # Correlation Heatmap
             st.subheader("📊 Asset Correlation Matrix")
             corr = returns.corr()
-            fig_corr = go.Figure(data=go.Heatmap(
-                z=corr.values, 
-                x=corr.columns, 
-                y=corr.columns, 
-                colorscale='RdBu', 
-                zmid=0,
-                text=corr.values.round(2),
-                texttemplate='%{text}',
-                textfont={"size": 10}
-            ))
+            fig_corr = go.Figure(data=go.Heatmap(z=corr.values, x=corr.columns, y=corr.columns, colorscale='RdBu', zmid=0, text=corr.values.round(2), texttemplate='%{text}', textfont={"size": 10}))
             fig_corr.update_layout(height=500)
             st.plotly_chart(fig_corr, use_container_width=True)
 
@@ -562,16 +589,10 @@ if st.session_state.run_clicked:
                 'Skewness': returns.skew(),
                 'Excess Kurtosis': returns.kurtosis()
             }).round(4)
-            st.dataframe(stats_df.style.format({
-                'Ann. Return': '{:.2%}',
-                'Ann. Vol': '{:.2%}',
-                'Sharpe': '{:.2f}'
-            }), use_container_width=True, hide_index=True)
+            st.dataframe(stats_df.style.format({'Ann. Return': '{:.2%}', 'Ann. Vol': '{:.2%}', 'Sharpe': '{:.2f}'}), use_container_width=True, hide_index=True)
 
             # Download Results
             st.subheader("💾 Download Results")
-            
-            # Prepare download data
             download_data = []
             for bt in backtest_results:
                 download_data.append({
@@ -586,14 +607,15 @@ if st.session_state.run_clicked:
                     'Kupiec_Failures': bt['Kupiec']['failures'],
                     'Kupiec_p_value': bt['Kupiec']['p_value'],
                     'Kupiec_Passed': bt['Kupiec']['passed'],
+                    'Christoffersen_LR_cc': bt['Christoffersen']['LR_cc'],
+                    'Christoffersen_p_value': bt['Christoffersen']['p_value'],
+                    'Christoffersen_Reject': bt['Christoffersen']['reject_H0'],
                     'Basel_Traffic_Light': bt['Traffic Light']['zone']
                 })
-            
             results_df = pd.DataFrame(download_data)
             csv = results_df.to_csv(index=False).encode('utf-8')
             st.download_button("📥 Download Results CSV", csv, "risk_results.csv", "text/csv")
             
-            # If custom weights, also download the weights
             if portfolio_type == "Custom Weights" and custom_weights_dict:
                 weights_df = pd.DataFrame([custom_weights_dict])
                 weights_csv = weights_df.to_csv(index=False).encode('utf-8')
@@ -621,6 +643,7 @@ else:
     - **Sharpe-Optimized Benchmark**: Compare against the theoretical optimum
     - **Min Variance Benchmark**: See the lowest possible volatility portfolio
     - **Regulatory Validation**: Kupiec tests & Basel Traffic Light zones
+    - **Christoffersen Test**: Conditional coverage (checks for independence of failures)
     - **Rolling Risk Analysis**: See how VaR changes through market cycles
     
     ### 🚀 Quick Start
@@ -630,25 +653,3 @@ else:
     3. Compare against Sharpe-Optimized and Min Variance benchmarks
     4. See if your strategy beats the theoretical optimum
     """)
-
-    # Example comparison
-    with st.expander("📖 Understanding the Benchmarks"):
-        st.markdown("""
-        **Sharpe-Optimized Portfolio**
-        - Solves for weights that maximize (Return - RiskFree)/Volatility
-        - Theoretically the best risk-adjusted return
-        - Often concentrated in best-performing assets
-        - Can have high volatility despite high Sharpe
-        
-        **Min Variance Portfolio**
-        - Solves for lowest possible volatility regardless of return
-        - Often diversified across uncorrelated assets
-        - Lower risk but potentially lower returns
-        - Good for risk-averse investors
-        
-        **Your Custom Portfolio**
-        - Your actual or proposed allocation
-        - Compare Sharpe ratio to see if you're beating the market
-        - Compare VaR to see if you're taking more tail risk
-        - Regulatory backtest shows if your VaR model is accurate
-        """)
