@@ -102,7 +102,7 @@ def kupiec_test(returns, var_threshold, alpha=0.05):
         'passed': not reject
     }
 
-def traffic_light(returns, var_threshold, alpha=0.01, window=250):
+def traffic_light(returns, var_threshold, alpha=0.05, window=250):
     """Basel Traffic Light test"""
     n = len(returns)
     failures = int(np.sum(returns < -var_threshold))
