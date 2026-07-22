@@ -243,7 +243,7 @@ def optimize_portfolio(returns, method='max_sharpe'):
 
 st.set_page_config(page_title="Risk Metrics Dashboard", page_icon="📊", layout="wide")
 st.title("📊 Portfolio Risk Metrics Dashboard")
-st.markdown("Basel-compliant VaR/ES with Kupiec & **Christoffersen** backtesting | Compare vs. Sharpe-Optimized Portfolio")
+st.markdown("Basel-compliant VaR/ES with Kupiec & Christoffersen backtesting | Compare vs. Sharpe-Optimized Portfolio")
 
 # Sidebar configuration
 with st.sidebar:
