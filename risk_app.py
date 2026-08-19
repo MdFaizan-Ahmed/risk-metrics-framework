@@ -317,8 +317,11 @@ if st.session_state.run_clicked:
                 st.stop()
 
             # Always compute Sharpe-optimized and Min Variance for benchmarking
-            sharpe_weights, sharpe_stats = optimize_portfolio(returns, 'max_sharpe')
-            minvar_weights, minvar_stats = optimize_portfolio(returns, 'min_variance')
+            split_date = pd.to_datetime(train_split)
+            train_returns = returns[returns.index < split_date]
+
+            sharpe_weights, sharpe_stats = optimize_portfolio(train_returns, 'max_sharpe')
+            minvar_weights, minvar_stats = optimize_portfolio(train_returns, 'min_variance')
             
             # Calculate portfolio returns for benchmarks
             sharpe_returns, sharpe_ann_ret, sharpe_ann_vol, sharpe_div = compute_portfolio_metrics(returns, sharpe_weights)
@@ -399,8 +402,6 @@ if st.session_state.run_clicked:
                 if len(bench_df.columns) > 1:
                     st.dataframe(bench_df.style.format({col: '{:.2%}' for col in bench_df.columns if col != 'Asset'}), 
                                 use_container_width=True, hide_index=True)
-
-            split_date = pd.to_datetime(train_split)
             
             def backtest_portfolio(port_returns, name, weights=None, port_type=None):
                 train = port_returns[port_returns.index < split_date]
